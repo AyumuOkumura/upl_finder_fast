@@ -246,9 +246,13 @@ def run_design_workflow(
         )
 
         for hit in hits:
-            # Distance from left primer 3' end (at position left_len-1) to probe start
+            # Distance calculation: number of bases between primer 3' end and probe edge
+            # Left primer occupies positions 0 to (left_len-1), with 3' end at (left_len-1)
+            # dist_l = hit.start - (left_len - 1) gives distance from 3' position to probe start position
+            # This counts the gap plus 1 (e.g., if 3' at 19 and probe at 25: 25-19=6, with 5 bases between)
             dist_l = hit.start - (cand.left_len - 1)
-            # Distance from probe end to right primer 3' end (at position product_size-1)
+            # Right primer 3' end is at position (product_size - 1)
+            # dist_r counts from probe end position to right primer 3' position
             dist_r = (cand.product_size - 1) - hit.end
             if dist_l < inputs.min_probe_offset_bp or dist_r < inputs.min_probe_offset_bp:
                 continue

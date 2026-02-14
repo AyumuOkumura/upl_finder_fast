@@ -31,9 +31,10 @@ class BlastHit:
     mismatch_3p: int | None = None
 
     def three_prime_pos(self) -> int:
-        # For plus strand primers, 3' end is at the higher coordinate (send).
-        # For minus strand primers, 3' end is at the lower coordinate (send).
-        # In BLAST output: plus has sstart < send, minus has sstart > send.
+        # For plus strand primers, 3' end is at the higher coordinate.
+        # For minus strand primers, 3' end is at the lower coordinate.
+        # In BLAST output: plus has sstart < send (returns send via max()),
+        # minus has sstart > send (returns send via min()).
         return max(self.sstart, self.send) if self.sstrand == "plus" else min(self.sstart, self.send)
 
 
