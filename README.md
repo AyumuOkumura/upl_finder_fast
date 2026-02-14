@@ -35,7 +35,7 @@ python -m pip install -e .
 ## 実行 / Run
 
 ```bash
-upl_finder_fast --param parameter.toml --gene ERBB4
+upl_finder_fast --param parameter.toml --gene GAPDH
 ```
 
 Run (English): same as above.
@@ -48,9 +48,11 @@ upl_finder_fast --param parameter.toml --fasta target.fa
 upl_finder_fast --param parameter.toml --seq ACTG...   # paste cDNA
 ```
 
+- `parameter.toml` の編集: `[design]` で標的種（例: GAPDH なら `human`）やTm・産物サイズを調整し、`[specificity]` でBLAST DBパスやモード（特異性不要なら `mode = "none"`）を設定します。`[paths]` の `upl_probe_pkl` は同梱の `roche_upl_sequences.pkl` か、自作の {probe_id: sequence} pickle に差し替えられます。  
+  Edit `parameter.toml`: tune species/Tm/product size under `[design]`, set BLAST DB paths or `mode = "none"` under `[specificity]`, and point `[paths].upl_probe_pkl` to the bundled `roche_upl_sequences.pkl` or your own `{probe_id: sequence}` pickle.
 - `--param`: `parameter.toml` で設計条件（Tm範囲、プローブ距離など）と特異性用BLAST DBのパス (`specificity.transcriptome_blast_db`, `specificity.genome_blast_db`) を設定します。  
-  Configure design constraints and BLAST DB paths in `parameter.toml` (`design.*`, `specificity.*`, `paths.upl_probe_json`).
+  Configure design constraints and BLAST DB paths in `parameter.toml` (`design.*`, `specificity.*`, `paths.upl_probe_pkl`).
 - `--output` を省略すると `output.out_dir`（デフォルト `upl_primer_probe/`）に `primer_upl_<target>_<YYMMDD_HHMM>.md` を保存します。  
   When `--output` is omitted, a timestamped Markdown report is written under `output.out_dir` (default `upl_primer_probe/`).
-- Roche UPL プローブ配列は `roche_upl_sequences.json`（同梱）を参照します。  
-  Roche UPL probe sequences are read from the bundled `roche_upl_sequences.json`.
+- Roche UPL プローブ配列は pickle 版の `roche_upl_sequences.pkl`（同梱）から読み込みます。  
+  Roche UPL probe sequences are read from the bundled pickle `roche_upl_sequences.pkl`.

@@ -114,8 +114,8 @@ def main() -> None:
     param_path = Path(args.param)
     cfg = _load_params(param_path)
     paths = cfg.get("paths", {})
-    upl_json = _resolve_path(param_path.parent, paths.get("upl_probe_json", "roche_upl_sequences.json")) or Path(
-        "roche_upl_sequences.json"
+    upl_pickle = _resolve_path(param_path.parent, paths.get("upl_probe_pkl", "roche_upl_sequences.pkl")) or Path(
+        "roche_upl_sequences.pkl"
     )
 
     if args.gene:
@@ -138,7 +138,7 @@ def main() -> None:
 
     inputs = _build_inputs(cfg, param_path.parent, input_type=input_type, raw_input=raw_input)
     ensembl = EnsemblClient()
-    upl_probes = load_upl_probes(str(upl_json))
+    upl_probes = load_upl_probes(str(upl_pickle))
 
     last_pct: float | None = None
     last_msg: str | None = None

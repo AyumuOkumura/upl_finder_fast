@@ -25,7 +25,7 @@ max_target_amplicon_size = 1000
 blastn_parallel_jobs = -1
 
 [paths]
-upl_probe_json = "roche_upl_sequences.json"
+upl_probe_pkl = "roche_upl_sequences.pkl"
 
 [output]
 out_dir = "upl_primer_probe"

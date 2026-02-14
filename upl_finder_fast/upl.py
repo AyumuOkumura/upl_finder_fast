@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import pickle
 from dataclasses import dataclass
 from typing import Any
@@ -17,35 +16,21 @@ _RUST_PROBES_ID: int | None = None
 
 def load_upl_probes(path: str) -> dict[str, str]:
     p = Path(path)
-    if p.suffix == ".pkl" and p.exists():
-        with p.open("rb") as f:
-            obj = pickle.load(f)
-    else:
-        cache = p.with_suffix(".pkl")
-        if cache.exists() and (not p.exists() or cache.stat().st_mtime >= p.stat().st_mtime):
-            try:
-                with cache.open("rb") as f:
-                    obj = pickle.load(f)
-            except Exception:
-                obj = None
-        else:
-            obj = None
-
-    if obj is None:
-        obj = json.loads(p.read_text(encoding="utf-8"))
+    if p.suffix != ".pkl":
+        raise ValueError("UPL probe data must be provided as a pickle (.pkl)")
+    if not p.exists():
+        raise FileNotFoundError(p)
+    with p.open("rb") as f:
+        obj = pickle.load(f)
     if not isinstance(obj, dict):
-        raise ValueError("UPL JSON must be a dict: {probe_id: sequence}")
+        raise ValueError("UPL pickle must be a dict: {probe_id: sequence}")
     probes: dict[str, str] = {}
     for k, v in obj.items():
         if not isinstance(k, str) or not isinstance(v, str):
             continue
         probes[k] = v.upper().replace(" ", "").replace("\n", "")
-    if p.exists() and p.suffix != ".pkl":
-        try:
-            with cache.open("wb") as f:
-                pickle.dump(probes, f, protocol=pickle.HIGHEST_PROTOCOL)
-        except Exception:
-            pass
+    if not probes:
+        raise ValueError("UPL pickle contained no valid probe sequences")
     return probes
 
 
