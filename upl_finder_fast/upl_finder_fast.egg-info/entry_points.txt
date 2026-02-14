@@ -1,0 +1,2 @@
+[console_scripts]
+upl_finder_fast = upl_finder_fast.cli:main

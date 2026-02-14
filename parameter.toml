@@ -1,0 +1,31 @@
+[design]
+species = "mouse"
+primer_tm_opt = 59.5
+primer_tm_min = 59.0
+primer_tm_max = 60.0
+primer_tm_diff_max = 3.0
+product_size_min = 60
+product_size_max = 150
+min_probe_offset_bp = 5
+max_pairs = 50
+selected_transcript_id = ""
+
+[specificity]
+mode = "local_blast (in_silico_pcr)"
+blastn_path = "blastn"
+transcriptome_blast_db = "data/blastdb/human_cdna"
+genome_blast_db = "data/blastdb/human_genome"
+top_n = 20
+max_offtarget_amplicons = 1
+min_mismatches_total = 2
+min_mismatches_3p = 2
+three_prime_window = 5
+ignore_mismatches_total_ge = 6
+max_target_amplicon_size = 1000
+blastn_parallel_jobs = -1
+
+[paths]
+upl_probe_json = "roche_upl_sequences.json"
+
+[output]
+out_dir = "upl_primer_probe"

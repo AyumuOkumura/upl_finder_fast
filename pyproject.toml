@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "upl_finder_fast"
+version = "0.1.0"
+description = "Fast qPCR primer + Roche UPL probe design (Rust-accelerated)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "streamlit>=1.32",
+  "requests>=2.31",
+  "pandas>=2.0",
+  "primer3-py>=2.0.3",
+  "pydantic>=2.5",
+]
+
+[project.scripts]
+upl_finder_fast = "upl_finder_fast.cli:main"
+
+[tool.setuptools]
+packages = ["upl_finder_fast"]

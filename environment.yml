@@ -1,0 +1,11 @@
+name: upl_finder_fast
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.12
+  - pip
+  - blast
+  - pip:
+      - -r requirements.txt
+      - -e .
