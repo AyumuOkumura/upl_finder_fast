@@ -19,11 +19,11 @@ conda activate upl_finder_fast
 ## 実行 / Run
 
 ```bash
-upl_finder_fast --param ../parameter.toml --gene ERBB4
+upl_finder_fast --param ../parameter.toml --gene GAPDH
 ```
 
 Run (English):
 
 ```bash
-upl_finder_fast --param ../parameter.toml --gene ERBB4
+upl_finder_fast --param ../parameter.toml --gene GAPDH
 ```
