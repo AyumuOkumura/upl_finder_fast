@@ -246,7 +246,9 @@ def run_design_workflow(
         )
 
         for hit in hits:
+            # Distance from left primer 3' end (at position left_len-1) to probe start
             dist_l = hit.start - (cand.left_len - 1)
+            # Distance from probe end to right primer 3' end (at position product_size-1)
             dist_r = (cand.product_size - 1) - hit.end
             if dist_l < inputs.min_probe_offset_bp or dist_r < inputs.min_probe_offset_bp:
                 continue
