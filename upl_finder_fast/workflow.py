@@ -487,6 +487,14 @@ def _apply_exon_constraint_with_fallback(
 
 
 def _has_3p_gc_run(seq: str, run_len: int = 3) -> bool:
+    """
+    Check if primer has consecutive G/C bases at 3' end.
+    Having 3+ consecutive G/C at 3' end can cause:
+    - Strong secondary structures
+    - Non-specific binding
+    This is stricter than Primer3's PRIMER_GC_CLAMP which just requires
+    a minimum number of G/C in the last few bases.
+    """
     count = 0
     for base in reversed(seq.upper()):
         if base in {"G", "C"}:
@@ -499,6 +507,14 @@ def _has_3p_gc_run(seq: str, run_len: int = 3) -> bool:
 
 
 def _has_poly_run(seq: str, run_len: int = 4) -> bool:
+    """
+    Check for runs of identical bases (poly-A, poly-T, poly-G, poly-C).
+    Poly-runs can cause:
+    - Mispriming
+    - Secondary structure formation
+    Note: Primer3's PRIMER_MAX_POLY_X=3 should already filter these,
+    but this provides an additional safety check.
+    """
     if not seq:
         return False
     last = seq[0]

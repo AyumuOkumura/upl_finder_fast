@@ -266,9 +266,19 @@ def filter_hits_in_silico(
     ignore_mismatches_total_ge: int,
 ) -> list[BlastHit]:
     """
-    off-target として問題になり得るヒットのみ残す。
-    - total >= min_mismatches_total かつ 3'窓 >= min_mismatches_3p を満たすものは安全側として除外
-    - mismatch_total >= ignore_mismatches_total_ge は無視
+    Filter BLAST hits to identify primers that could cause off-target amplification.
+    
+    Returns hits that are potential off-targets (not filtered out as "safe").
+    
+    A hit is considered "safe" (filtered out) if BOTH conditions are met:
+    - Total mismatches >= min_mismatches_total AND
+    - 3' window mismatches >= min_mismatches_3p
+    
+    This reflects PCR biology: off-target amplification requires BOTH
+    overall sequence similarity AND good 3' end matching.
+    
+    Hits with excessive mismatches (>= ignore_mismatches_total_ge) are also
+    filtered as they're unlikely to amplify under any conditions.
     """
     out: list[BlastHit] = []
     for h in hits:
@@ -308,6 +318,18 @@ def filter_hits_in_silico(
 def _mismatch_stats(
     *, qseq: str | None, sseq: str | None, primer_len: int, three_prime_window: int
 ) -> tuple[int, int, bool] | None:
+    """
+    Calculate mismatch statistics for primer-template alignment.
+    
+    Returns (total_mismatches, mismatches_in_3p_window, terminal_base_matches) or None.
+    
+    The 3' end of primers is critical for PCR specificity because:
+    - DNA polymerase extends from 3' end
+    - Mismatches at 3' end strongly inhibit primer extension
+    - Terminal mismatch is especially important
+    
+    Filters out alignments with gaps (indels) as they indicate poor binding.
+    """
     if not qseq or not sseq:
         return None
     pairs: list[tuple[str, str]] = []
@@ -316,6 +338,7 @@ def _mismatch_stats(
             continue
         pairs.append((q, s))
     if len(pairs) != primer_len:
+        # Alignment doesn't cover full primer length (has gaps) - reject
         return None
     mismatch_total = sum(1 for q, s in pairs if q != s)
     window = pairs[-max(1, int(three_prime_window)) :]
