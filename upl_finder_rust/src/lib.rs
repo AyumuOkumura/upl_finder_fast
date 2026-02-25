@@ -396,8 +396,14 @@ fn junction_flags(
     let left_0 = product_start;
     let left_1 = product_start + left_len - 1;
     let right_3p = product_start + product_size - 1;
+    let right_start_guess = right_3p - (right_len - 1);
 
     let spans_left = boundaries.iter().any(|&b| left_0 <= b && b < left_1);
+    // Check right primer before amplicon so that right-primer-spanning junctions
+    // are not masked by the broader amplicon check.
+    let spans_right = boundaries
+        .iter()
+        .any(|&b| right_start_guess <= b && b < right_3p);
     let spans_amplicon = boundaries
         .iter()
         .any(|&b| product_start <= b && b < product_start + product_size - 1);
@@ -405,16 +411,12 @@ fn junction_flags(
     if spans_left {
         return (true, "left_primer_spans_junction".to_string());
     }
-    if spans_amplicon {
-        return (true, "amplicon_spans_junction".to_string());
-    }
-
-    let right_start_guess = right_3p - (right_len - 1);
-    let spans_right = boundaries
-        .iter()
-        .any(|&b| right_start_guess <= b && b < right_3p);
     if spans_right {
         return (true, "right_primer_spans_junction (approx)".to_string());
+    }
+    if spans_amplicon {
+        // amplicon spans junction even if neither primer does
+        return (true, "amplicon_spans_junction".to_string());
     }
     (false, "no_junction".to_string())
 }

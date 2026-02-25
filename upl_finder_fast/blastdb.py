@@ -65,9 +65,9 @@ def _download_and_makeblastdb(*, url: str, prefix: Path) -> None:
             fa_path.unlink()
 
 
-def _download(url: str, dest: Path) -> None:
+def _download(url: str, dest: Path, timeout: int = 300) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with urllib.request.urlopen(url) as r, open(dest, "wb") as f:
+    with urllib.request.urlopen(url, timeout=timeout) as r, open(dest, "wb") as f:
         shutil.copyfileobj(r, f)
 
 

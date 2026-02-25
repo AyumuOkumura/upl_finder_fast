@@ -409,6 +409,9 @@ def run_design_workflow(
     )
 
 
+_MAX_SPECIFICITY_RETRIES = 5
+
+
 def run_design_with_specificity_retries(
     *,
     inputs: DesignInputs,
@@ -448,6 +451,12 @@ def run_design_with_specificity_retries(
             result.warnings.append(
                 "Specificity を再評価できません（BLAST未実行/失敗の可能性）。/ "
                 "Specificity re-check skipped due to BLAST issues."
+            )
+            break
+        if len(attempts) >= _MAX_SPECIFICITY_RETRIES:
+            result.warnings.append(
+                f"Specificity 再評価の上限（{_MAX_SPECIFICITY_RETRIES}回）に達しました。/ "
+                f"Reached max specificity retries ({_MAX_SPECIFICITY_RETRIES})."
             )
             break
         result.warnings.append(
@@ -545,20 +554,21 @@ def _junction_flags(
     left_0 = product_start
     left_1 = product_start + left_len - 1
     right_3p = product_start + product_size - 1
+    right_start_guess = right_3p - (right_len - 1)
 
     spans_left = any((left_0 <= b < left_1) for b in boundaries)
+    # Check right primer before amplicon so that right-primer-spanning junctions
+    # are not masked by the broader amplicon check.
+    spans_right = any((right_start_guess <= b < right_3p) for b in boundaries)
     spans_amplicon = any((product_start <= b < product_start + product_size - 1) for b in boundaries)
 
     if spans_left:
         return (True, "left_primer_spans_junction")
-    if spans_amplicon:
-        # amplicon spans junction even if left primer doesn't (right primer may be in another exon)
-        return (True, "amplicon_spans_junction")
-    # right primer junction-spanning check
-    right_start_guess = right_3p - (right_len - 1)
-    spans_right = any((right_start_guess <= b < right_3p) for b in boundaries)
     if spans_right:
         return (True, "right_primer_spans_junction (approx)")
+    if spans_amplicon:
+        # amplicon spans junction even if neither primer does
+        return (True, "amplicon_spans_junction")
     return (False, "no_junction")
 
 
