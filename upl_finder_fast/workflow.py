@@ -177,6 +177,20 @@ def run_design_workflow(
         transcript_details = ensembl.get_transcript_details(inputs.raw_input)
         template = _normalize_seq(transcript_details.cdna_sequence)
         transcript_info = _transcript_info_dict(transcript_details)
+    elif inputs.input_type == "RefSeq Transcript ID":
+        refseq_id = inputs.raw_input
+        chosen_tid, candidates = ensembl.resolve_refseq_mrna_to_ensembl_transcript(inputs.species, refseq_id)
+        if len(candidates) > 1:
+            warnings.append(
+                f"RefSeq IDから複数のEnsembl transcriptが解決されました。先頭を採用します。/ "
+                f"Multiple Ensembl transcripts resolved from RefSeq {refseq_id}; using {chosen_tid}; "
+                f"candidates={candidates}"
+            )
+        transcript_details = ensembl.get_transcript_details(chosen_tid)
+        template = _normalize_seq(transcript_details.cdna_sequence)
+        transcript_info = _transcript_info_dict(transcript_details)
+        transcript_info["refseq_transcript_id_input"] = refseq_id
+        transcript_info["selected_transcript_id"] = chosen_tid
     else:
         gene_symbol = inputs.raw_input
         records = ensembl.lookup_gene_transcripts(inputs.species, gene_symbol)

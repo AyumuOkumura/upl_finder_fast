@@ -142,6 +142,7 @@ def design_result_markdown(
         "exon_count",
         "cdna_length",
         "gene_symbol_input",
+        "refseq_transcript_id_input",
         "selected_transcript_id",
         "selected_transcript_biotype",
         "note",

@@ -33,6 +33,15 @@ conda activate upl_finder_fast
 upl_finder_fast --param parameter.toml --gene GAPDH
 ```
 
+Other inputs:
+
+```bash
+upl_finder_fast --param parameter.toml --transcript ENST00000323125
+upl_finder_fast --param parameter.toml --refseq NM_000546
+upl_finder_fast --param parameter.toml --fasta target.fa
+upl_finder_fast --param parameter.toml --seq ACTG...   # paste cDNA
+```
+
 Rust mode examples:
 
 ```bash

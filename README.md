@@ -31,6 +31,8 @@ This section summarizes the **current implemented behavior** (more “spec” th
   Fetches transcript candidates from Ensembl API and selects one (prefers `selected_transcript_id` when provided).
 - `--transcript <ENST...>`: 指定transcriptのcDNAを Ensembl API から取得します。  
   Fetches the transcript cDNA from Ensembl API.
+- `--refseq <NM_...>`: RefSeq transcript ID から Ensembl transcript を解決し、cDNAを Ensembl API から取得します（複数候補がある場合は先頭を採用し警告に候補一覧を出します）。  
+  Resolves RefSeq transcript ID to an Ensembl transcript, then fetches cDNA from Ensembl API (if multiple candidates are found, uses the first and prints a warning with candidates).
 - `--seq <cDNA>` / `--fasta <file>`: cDNA配列を直接使用します（Ensembl問い合わせ無し）。  
   Uses the provided cDNA sequence directly (no Ensembl lookup).
 
@@ -125,6 +127,7 @@ Other inputs / その他の入力例:
 
 ```bash
 upl_finder_fast --param parameter.toml --transcript ENST00000323125
+upl_finder_fast --param parameter.toml --refseq NM_000546
 upl_finder_fast --param parameter.toml --fasta target.fa
 upl_finder_fast --param parameter.toml --seq ACTG...   # paste cDNA
 ```

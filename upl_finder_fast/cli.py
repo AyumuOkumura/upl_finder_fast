@@ -132,6 +132,7 @@ def main() -> None:
     g = p.add_mutually_exclusive_group(required=True)
     g.add_argument("--gene", help="Gene symbol")
     g.add_argument("--transcript", help="Ensembl transcript ID")
+    g.add_argument("--refseq", help="RefSeq transcript ID (e.g., NM_000546)")
     g.add_argument("--seq", help="Target cDNA sequence")
     g.add_argument("--fasta", help="FASTA file path")
     p.add_argument("--rust", choices=["auto", "on", "off"], help="Rust acceleration mode")
@@ -163,6 +164,10 @@ def main() -> None:
     elif args.transcript:
         input_type = "Ensembl Transcript ID"
         raw_input = args.transcript.strip()
+        target_label = raw_input
+    elif args.refseq:
+        input_type = "RefSeq Transcript ID"
+        raw_input = args.refseq.strip()
         target_label = raw_input
     elif args.seq:
         input_type = "Paste cDNA sequence"

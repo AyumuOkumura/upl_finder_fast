@@ -43,6 +43,38 @@ class EnsemblClient:
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
+    def resolve_refseq_mrna_to_ensembl_transcript(self, species: Species, refseq_id: str) -> tuple[str, list[str]]:
+        """
+        Resolve RefSeq mRNA transcript ID (e.g., NM_000546) to Ensembl transcript ID.
+
+        Uses Ensembl REST xrefs endpoint:
+          /xrefs/symbol/{species}/{refseq_id}?external_db=RefSeq_mRNA
+        """
+        rid = refseq_id.strip()
+        if not rid:
+            raise ValueError("Empty RefSeq ID")
+        payload = self._get_json(
+            f"/xrefs/symbol/{species.value}/{rid}",
+            params={"external_db": "RefSeq_mRNA", "content-type": "application/json"},
+        )
+        tx_ids: list[str] = []
+        seen: set[str] = set()
+        for item in payload or []:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") != "transcript":
+                continue
+            tid = item.get("id")
+            if not isinstance(tid, str) or not tid:
+                continue
+            if tid in seen:
+                continue
+            seen.add(tid)
+            tx_ids.append(tid)
+        if not tx_ids:
+            raise RuntimeError(f"RefSeq ID could not be resolved to Ensembl transcript: {rid} (species={species.value})")
+        return (tx_ids[0], tx_ids)
+
     def lookup_gene_transcripts(self, species: Species, gene_symbol: str) -> list[TranscriptRecord]:
         payload = self._get_json(f"/lookup/symbol/{species.value}/{gene_symbol}", params={"expand": "1"})
         transcripts = payload.get("Transcript") or []
