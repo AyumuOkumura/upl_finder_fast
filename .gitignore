@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+
+data/
+upl_primer_probe/
+data/blastdb/
+
+upl_finder_rust/target/

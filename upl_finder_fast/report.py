@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 
@@ -10,6 +11,10 @@ def _probe_tm_simple(seq: str) -> float:
     g = s.count("G")
     c = s.count("C")
     return float(2 * (a + t) + 4 * (g + c))
+
+
+def _round_1dp_half_up(v: float) -> str:
+    return str(Decimal(str(v)).quantize(Decimal("0.0"), rounding=ROUND_HALF_UP))
 
 
 def _amplicon_diagram_lines(p: Any, *, width: int = 60) -> list[str]:
@@ -25,7 +30,8 @@ def _amplicon_diagram_lines(p: Any, *, width: int = 60) -> list[str]:
         idx = int(round(pos / scale))
         return max(0, min(w - 1, idx))
 
-    arr = ["-"] * w
+    primers = ["-"] * w
+    probe = ["-"] * w
     a_start = int(getattr(p, "amplicon_start", 0) or 0)
     left_start = int(getattr(p, "left_start", 0) or 0) - a_start
     left_len = int(getattr(p, "left_len", 0) or 0)
@@ -34,7 +40,7 @@ def _amplicon_diagram_lines(p: Any, *, width: int = 60) -> list[str]:
     probe_start = int(getattr(p, "probe_start_in_amplicon", 0) or 0)
     probe_end = int(getattr(p, "probe_end_in_amplicon", 0) or 0)
 
-    def _mark(start: int, length_bp: int, ch: str) -> None:
+    def _mark(arr: list[str], start: int, length_bp: int, ch: str) -> None:
         if length_bp <= 0:
             return
         s = max(0, min(length - 1, start))
@@ -46,52 +52,73 @@ def _amplicon_diagram_lines(p: Any, *, width: int = 60) -> list[str]:
         for i in range(i0, i1 + 1):
             arr[i] = ch if arr[i] == "-" else "X"
 
-    _mark(left_start, left_len, "L")
-    _mark(right_start, right_len, "R")
-    _mark(probe_start, max(1, probe_end - probe_start + 1), "P")
+    _mark(primers, left_start, left_len, "L")
+    _mark(primers, right_start, right_len, "R")
+    _mark(probe, probe_start, max(1, probe_end - probe_start + 1), "P")
 
-    legend = "L: left primer  R: right primer  P: probe  X: overlap"
+    legend_primers = "Primers: L=left  R=right  X=overlap(scaled)"
+    legend_probe = "Probe: P=probe"
     coord = f"0{' ' * (w - 2)}{length - 1}" if w >= 2 else "0"
+
+    # Exact (non-scaled) overlap in bp, for sanity-checking.
+    left_end = left_start + left_len - 1
+    right_end = right_start + right_len - 1
+    ov_left = max(0, min(probe_end, left_end) - max(probe_start, left_start) + 1)
+    ov_right = max(0, min(probe_end, right_end) - max(probe_start, right_start) + 1)
     return [
         f"amplicon_len={length}bp",
         coord,
-        "".join(arr),
-        legend,
+        "".join(primers),
+        legend_primers,
+        "".join(probe),
+        legend_probe,
+        f"overlap_bp(left,probe)={ov_left} overlap_bp(probe,right)={ov_right}",
         f"left=[{left_start},{left_start + left_len - 1}] right=[{right_start},{right_start + right_len - 1}] "
         f"probe=[{probe_start},{probe_end}]",
     ]
 
 
-def design_result_markdown(result: Any) -> str:
+def _field_descriptions_lines() -> list[str]:
+    return [
+        "**項目の意味 / Field Descriptions**",
+        "- `species`: 設計対象の生物種 / Species used for design",
+        "- `design_started_at`: 設計開始日時 / Design start datetime",
+        "- `design_elapsed_min`: 設計時間（分） / Total design time (minutes)",
+        "- `transcript_info`: 選択された転写産物の情報 / Selected transcript metadata",
+        "- `pairs`: プライマーペア候補一覧 / List of primer pair candidates",
+        "- `pairs[].left_seq`: 左プライマー配列 / Left primer sequence",
+        "- `pairs[].right_seq`: 右プライマー配列 / Right primer sequence",
+        "- `pairs[].tm_left`: 左プライマーTm（℃） / Left primer Tm (°C)",
+        "- `pairs[].tm_right`: 右プライマーTm（℃） / Right primer Tm (°C)",
+        "- `pairs[].gc_left`: 左プライマーGC% / Left primer GC%",
+        "- `pairs[].gc_right`: 右プライマーGC% / Right primer GC%",
+        "- `pairs[].left_start/left_end`: 左プライマー位置 / Left primer position",
+        "- `pairs[].right_start/right_end`: 右プライマー位置 / Right primer position",
+        "- `pairs[].left_len/right_len`: プライマー長 / Primer length",
+        "- `pairs[].amplicon_start/amplicon_end`: 産物位置 / Amplicon position",
+        "- `pairs[].tx_*`/`genome_*`: 特異性情報 / Specificity info",
+        "- `pairs[].upl_probe_id/seq/tm`: UPL probe情報 / UPL probe info",
+        "- `pairs[].upl_probe_strand`: probeの向き（amplicon内の一致方向） / Probe match strand within amplicon",
+        "- `specificity_params.min_mismatches_total`: ミスマッチ下限(全体) / Min mismatches (total)",
+        "- `specificity_params.min_mismatches_3p`: 3'窓ミスマッチ下限 / Min mismatches (3' window)",
+        "- `specificity_params.ignore_mismatches_total_ge`: 無視するミスマッチ下限 / Ignore mismatches >= N",
+        "- `specificity_params.max_target_amplicon_size`: 最大アンプリコン長 / Max target amplicon size",
+        "",
+    ]
+
+
+def design_result_markdown(
+    result: Any, *, include_title: bool = True, include_field_descriptions: bool = True
+) -> str:
     transcript_info = result.transcript_info or {}
     species_obj = getattr(result, "species", None)
     species_value = getattr(species_obj, "value", species_obj)
     lines: list[str] = []
-    lines.append("# Primer UPL Design Result / 結果")
-    lines.append("")
-    lines.append("**項目の意味 / Field Descriptions**")
-    lines.append("- `species`: 設計対象の生物種 / Species used for design")
-    lines.append("- `design_started_at`: 設計開始日時 / Design start datetime")
-    lines.append("- `design_elapsed_min`: 設計時間（分） / Total design time (minutes)")
-    lines.append("- `transcript_info`: 選択された転写産物の情報 / Selected transcript metadata")
-    lines.append("- `pairs`: プライマーペア候補一覧 / List of primer pair candidates")
-    lines.append("- `pairs[].left_seq`: 左プライマー配列 / Left primer sequence")
-    lines.append("- `pairs[].right_seq`: 右プライマー配列 / Right primer sequence")
-    lines.append("- `pairs[].tm_left`: 左プライマーTm（℃） / Left primer Tm (°C)")
-    lines.append("- `pairs[].tm_right`: 右プライマーTm（℃） / Right primer Tm (°C)")
-    lines.append("- `pairs[].gc_left`: 左プライマーGC% / Left primer GC%")
-    lines.append("- `pairs[].gc_right`: 右プライマーGC% / Right primer GC%")
-    lines.append("- `pairs[].left_start/left_end`: 左プライマー位置 / Left primer position")
-    lines.append("- `pairs[].right_start/right_end`: 右プライマー位置 / Right primer position")
-    lines.append("- `pairs[].left_len/right_len`: プライマー長 / Primer length")
-    lines.append("- `pairs[].amplicon_start/amplicon_end`: 産物位置 / Amplicon position")
-    lines.append("- `pairs[].tx_*`/`genome_*`: 特異性情報 / Specificity info")
-    lines.append("- `pairs[].upl_probe_id/seq/tm`: UPL probe情報 / UPL probe info")
-    lines.append("- `specificity_params.min_mismatches_total`: ミスマッチ下限(全体) / Min mismatches (total)")
-    lines.append("- `specificity_params.min_mismatches_3p`: 3'窓ミスマッチ下限 / Min mismatches (3' window)")
-    lines.append("- `specificity_params.ignore_mismatches_total_ge`: 無視するミスマッチ下限 / Ignore mismatches >= N")
-    lines.append("- `specificity_params.max_target_amplicon_size`: 最大アンプリコン長 / Max target amplicon size")
-    lines.append("")
+    if include_title:
+        lines.append("# Primer UPL Design Result / 結果")
+        lines.append("")
+    if include_field_descriptions:
+        lines.extend(_field_descriptions_lines())
     lines.append("**結果 / Result**")
     lines.append("")
     lines.append(f"Species: `{species_value}`")
@@ -173,6 +200,7 @@ def design_result_markdown(result: Any) -> str:
             "pair_penalty",
             "upl_probe_id",
             "upl_probe_seq",
+            "upl_probe_strand",
             "probe_start_in_amplicon",
             "probe_end_in_amplicon",
             "dist_left_3p_to_probe",
@@ -189,6 +217,8 @@ def design_result_markdown(result: Any) -> str:
             "score",
         ]:
             value = getattr(p, key)
+            if key in {"tm_left", "tm_right"} and isinstance(value, (int, float)):
+                value = _round_1dp_half_up(float(value))
             lines.append(f"| `{key}` | `{value}` |")
         lines.append(f"| `upl_probe_tm` | `{upl_tm:.1f}` |")
         lines.append("")
@@ -211,6 +241,11 @@ def design_result_markdown(result: Any) -> str:
                     extra = f", mismatches L/R={mm_t}/{mm_r}, 3p={mm3_t}/{mm3_r}"
                 if gene:
                     extra = f"{extra}, gene={gene}"
+                is_target = a.get("is_target_gene")
+                if is_target is True:
+                    extra = f"{extra}, target_gene=1"
+                elif is_target is False:
+                    extra = f"{extra}, target_gene=0"
                 contig = a.get("contig")
                 if gene and contig:
                     contig = f"{contig} ({gene})"
@@ -253,11 +288,12 @@ def design_results_markdown(results: list[Any]) -> str:
     lines: list[str] = []
     lines.append("# Primer UPL Design Results (All Attempts) / 全試行結果")
     lines.append("")
+    lines.extend(_field_descriptions_lines())
     for i, res in enumerate(results, start=1):
         spec_params = getattr(res, "specificity_params", None) or {}
         max_off = spec_params.get("max_offtarget_amplicons")
         lines.append(f"## Attempt {i} (max_offtarget_amplicons={max_off})")
         lines.append("")
-        lines.append(design_result_markdown(res))
+        lines.append(design_result_markdown(res, include_field_descriptions=False))
         lines.append("")
     return "\n".join(lines)

@@ -19,7 +19,7 @@ from upl_finder_fast.specificity import (
     BlastHit,
     count_amplicon_products,
 )
-from upl_finder_fast.upl import find_upl_matches
+from upl_finder_fast.upl import find_upl_matches, rank_candidates_with_rust
 
 
 @dataclass(frozen=True)
@@ -63,6 +63,7 @@ class RankedPrimerPair:
 
     upl_probe_id: str
     upl_probe_seq: str
+    upl_probe_strand: str
     probe_start_in_amplicon: int
     probe_end_in_amplicon: int
     dist_left_3p_to_probe: int
@@ -104,6 +105,7 @@ class RankedPrimerPair:
             "pair_penalty": self.pair_penalty,
             "upl_probe_id": self.upl_probe_id,
             "upl_probe_seq": self.upl_probe_seq,
+            "upl_probe_strand": self.upl_probe_strand,
             "probe_start": self.probe_start_in_amplicon,
             "probe_end": self.probe_end_in_amplicon,
             "dist_left3p_probe": self.dist_left_3p_to_probe,
@@ -166,6 +168,7 @@ def run_design_workflow(
     transcript_details: TranscriptDetails | None = None
     template: str
     transcript_info: dict[str, Any] | None = None
+    target_transcript_ids: set[str] | None = None
 
     if inputs.input_type == "Paste cDNA sequence":
         template = _normalize_seq(inputs.raw_input)
@@ -179,6 +182,7 @@ def run_design_workflow(
         records = ensembl.lookup_gene_transcripts(inputs.species, gene_symbol)
         if not records:
             raise RuntimeError(f"No transcripts found for gene symbol: {gene_symbol}")
+        target_transcript_ids = {r.transcript_id for r in records}
 
         chosen = records[0]
         if inputs.selected_transcript_id:
@@ -204,6 +208,13 @@ def run_design_workflow(
                 f"Selected: {chosen.transcript_id} (biotype={chosen.biotype}, canonical={chosen.is_canonical})"
             )
 
+    target_gene_symbol: str | None = transcript_details.gene_symbol if transcript_details is not None else None
+    if target_transcript_ids is None and target_gene_symbol:
+        try:
+            target_transcript_ids = {r.transcript_id for r in ensembl.lookup_gene_transcripts(inputs.species, target_gene_symbol)}
+        except Exception:
+            target_transcript_ids = None
+
     if progress_cb is not None:
         progress_cb(15.0, "Designing primer candidates with Primer3...")
 
@@ -221,43 +232,86 @@ def run_design_workflow(
     boundaries = _cdna_exon_boundaries(transcript_details) if transcript_details is not None else []
 
     ranked: list[RankedPrimerPair] = []
-    total_cands = len(candidates)
-    for i, cand in enumerate(candidates):
-        product_start, product_end = cand.product_range()
-        amplicon = template[product_start:product_end]
-        if len(amplicon) != cand.product_size:
-            continue
-
-        if _has_3p_gc_run(cand.left_seq) or _has_3p_gc_run(cand.right_seq):
-            continue
-        if _has_poly_run(cand.left_seq) or _has_poly_run(cand.right_seq):
-            continue
-
-        hits = find_upl_matches(amplicon, upl_probes)
-        if not hits:
-            continue
-
-        junction_spanning, detail = _junction_flags(
-            boundaries=boundaries,
-            product_start=product_start,
-            left_len=cand.left_len,
-            right_len=cand.right_len,
-            product_size=cand.product_size,
-        )
-
-        for hit in hits:
-            # Distance calculation: number of bases between primer 3' end and probe edge
-            # Left primer occupies positions 0 to (left_len-1), with 3' end at (left_len-1)
-            # dist_l = hit.start - (left_len - 1) gives distance from 3' position to probe start position
-            # This counts the gap plus 1 (e.g., if 3' at 19 and probe at 25: 25-19=6, with 5 bases between)
-            dist_l = hit.start - (cand.left_len - 1)
-            # Right primer 3' end is at position (product_size - 1)
-            # dist_r counts from probe end position to right primer 3' position
-            dist_r = (cand.product_size - 1) - hit.end
-            if dist_l < inputs.min_probe_offset_bp or dist_r < inputs.min_probe_offset_bp:
+    rust_rows = rank_candidates_with_rust(
+        template=template,
+        upl_probes=upl_probes,
+        candidates=[asdict(c) for c in candidates],
+        exon_boundaries=boundaries,
+        min_probe_offset_bp=inputs.min_probe_offset_bp,
+    )
+    if rust_rows is not None:
+        ranked = [_ranked_pair_from_rust_row(row) for row in rust_rows]
+        if progress_cb is not None:
+            progress_cb(60.0, "Matching UPL probes...")
+    else:
+        total_cands = len(candidates)
+        for i, cand in enumerate(candidates):
+            product_start, product_end = cand.product_range()
+            amplicon = template[product_start:product_end]
+            if len(amplicon) != cand.product_size:
                 continue
 
-            score = _score_candidate(cand, junction_spanning=junction_spanning, dist_l=dist_l, dist_r=dist_r)
+            if _has_3p_gc_run(cand.left_seq) or _has_3p_gc_run(cand.right_seq):
+                continue
+            if _has_poly_run(cand.left_seq) or _has_poly_run(cand.right_seq):
+                continue
+
+            hits = find_upl_matches(amplicon, upl_probes)
+            if not hits:
+                continue
+
+            junction_spanning, detail = _junction_flags(
+                boundaries=boundaries,
+                product_start=product_start,
+                left_len=cand.left_len,
+                right_len=cand.right_len,
+                product_size=cand.product_size,
+            )
+
+            best_hit: tuple[float, object, int, int] | None = None
+            for hit in hits:
+                # Amplicon-relative coordinates (0-based, inclusive)
+                left_3p = cand.left_len - 1
+                right_3p = cand.product_size - 1
+                right_primer_start = cand.product_size - cand.right_len
+
+                # Always forbid any overlap between primers and probe, even when min_probe_offset_bp=0.
+                # left primer occupies [0, left_3p], right primer occupies [right_primer_start, right_3p].
+                if int(hit.start) <= left_3p:
+                    continue
+                if int(hit.end) >= right_primer_start:
+                    continue
+
+                # Distance in bp between primer 3' end and nearest probe base (0 when adjacent)
+                dist_l = int(hit.start) - left_3p - 1
+                dist_r = right_3p - int(hit.end) - 1
+                if dist_l < inputs.min_probe_offset_bp or dist_r < inputs.min_probe_offset_bp:
+                    continue
+                pref = _probe_preference(
+                    product_size=cand.product_size,
+                    probe_start=int(hit.start),
+                    probe_end=int(hit.end),
+                    dist_l=dist_l,
+                    dist_r=dist_r,
+                )
+                if best_hit is None or pref > best_hit[0]:
+                    best_hit = (pref, hit, dist_l, dist_r)
+
+            if best_hit is None:
+                continue
+
+            hit = best_hit[1]
+            dist_l = best_hit[2]
+            dist_r = best_hit[3]
+            probe_mid = (int(hit.start) + int(hit.end)) / 2.0
+            score = _score_candidate(
+                cand,
+                junction_spanning=junction_spanning,
+                dist_l=dist_l,
+                dist_r=dist_r,
+                probe_mid=probe_mid,
+                product_size=cand.product_size,
+            )
             left_start = cand.left_start
             left_end = cand.left_start + cand.left_len - 1
             right_end = product_start + cand.product_size - 1
@@ -272,10 +326,11 @@ def run_design_workflow(
                     gc_left=cand.gc_left,
                     gc_right=cand.gc_right,
                     pair_penalty=cand.pair_penalty,
-                    upl_probe_id=hit.probe_id,
-                    upl_probe_seq=hit.probe_seq,
-                    probe_start_in_amplicon=hit.start,
-                    probe_end_in_amplicon=hit.end,
+                    upl_probe_id=str(getattr(hit, "probe_id")),
+                    upl_probe_seq=str(getattr(hit, "probe_seq")),
+                    upl_probe_strand=str(getattr(hit, "strand", "+")),
+                    probe_start_in_amplicon=int(hit.start),
+                    probe_end_in_amplicon=int(hit.end),
                     dist_left_3p_to_probe=dist_l,
                     dist_probe_to_right_3p=dist_r,
                     left_start=left_start,
@@ -299,14 +354,21 @@ def run_design_workflow(
                     score=score,
                 )
             )
-        if progress_cb is not None and total_cands > 0:
-            if i == total_cands - 1 or i % 10 == 0:
-                pct = 15.0 + (45.0 * (i + 1) / total_cands)
-                progress_cb(pct, "Matching UPL probes...")
+            if progress_cb is not None and total_cands > 0:
+                if i == total_cands - 1 or i % 10 == 0:
+                    pct = 15.0 + (45.0 * (i + 1) / total_cands)
+                    progress_cb(pct, "Matching UPL probes...")
 
+    ranked = _dedup_primer_pairs(ranked)
     ranked = _apply_exon_constraint_with_fallback(ranked, warnings=warnings)
     ranked = _maybe_add_specificity(
-        ranked, inputs=inputs, ensembl=ensembl, warnings=warnings, progress_cb=progress_cb
+        ranked,
+        inputs=inputs,
+        ensembl=ensembl,
+        warnings=warnings,
+        target_gene_symbol=target_gene_symbol,
+        target_transcript_ids=target_transcript_ids,
+        progress_cb=progress_cb,
     )
     ranked.sort(key=lambda x: (-x.score, x.pair_penalty is None, x.pair_penalty or 1e9))
     if progress_cb is not None:
@@ -415,6 +477,50 @@ def _cdna_exon_boundaries(t: TranscriptDetails) -> list[int]:
     return boundaries
 
 
+def _ranked_pair_from_rust_row(row: dict[str, Any]) -> RankedPrimerPair:
+    tm_left_raw = row.get("tm_left")
+    tm_right_raw = row.get("tm_right")
+    gc_left_raw = row.get("gc_left")
+    gc_right_raw = row.get("gc_right")
+    pair_penalty_raw = row.get("pair_penalty")
+    return RankedPrimerPair(
+        left_seq=str(row["left_seq"]),
+        right_seq=str(row["right_seq"]),
+        product_size=int(row["product_size"]),
+        tm_left=None if tm_left_raw is None else float(tm_left_raw),
+        tm_right=None if tm_right_raw is None else float(tm_right_raw),
+        gc_left=None if gc_left_raw is None else float(gc_left_raw),
+        gc_right=None if gc_right_raw is None else float(gc_right_raw),
+        pair_penalty=None if pair_penalty_raw is None else float(pair_penalty_raw),
+        upl_probe_id=str(row["upl_probe_id"]),
+        upl_probe_seq=str(row["upl_probe_seq"]),
+        upl_probe_strand=str(row.get("upl_probe_strand", "+")),
+        probe_start_in_amplicon=int(row["probe_start_in_amplicon"]),
+        probe_end_in_amplicon=int(row["probe_end_in_amplicon"]),
+        dist_left_3p_to_probe=int(row["dist_left_3p_to_probe"]),
+        dist_probe_to_right_3p=int(row["dist_probe_to_right_3p"]),
+        left_start=int(row["left_start"]),
+        left_end=int(row["left_end"]),
+        right_start=int(row["right_start"]),
+        right_end=int(row["right_end"]),
+        left_len=int(row["left_len"]),
+        right_len=int(row["right_len"]),
+        amplicon_start=int(row["amplicon_start"]),
+        amplicon_end=int(row["amplicon_end"]),
+        junction_spanning=bool(row.get("junction_spanning", False)),
+        junction_spanning_detail=str(row.get("junction_spanning_detail", "no_junction")),
+        tx_left_exact_hits=None,
+        tx_right_exact_hits=None,
+        genome_left_exact_hits=None,
+        genome_right_exact_hits=None,
+        tx_product_offtargets=None,
+        genome_product_offtargets=None,
+        tx_amplicons=[],
+        genome_amplicons=[],
+        score=float(row["score"]),
+    )
+
+
 def _junction_flags(
     *, boundaries: list[int], product_start: int, left_len: int, right_len: int, product_size: int
 ) -> tuple[bool, str]:
@@ -442,16 +548,62 @@ def _junction_flags(
     return (False, "no_junction")
 
 
-def _score_candidate(cand: PrimerPairCandidate, *, junction_spanning: bool, dist_l: int, dist_r: int) -> float:
+def _probe_preference(*, product_size: int, probe_start: int, probe_end: int, dist_l: int, dist_r: int) -> float:
+    """
+    同一primer pairで複数probe候補がある場合の選好スコア。
+    - 3'端から十分離れていることは上流で担保（min_probe_offset_bp）
+    - できるだけ中央寄り & 左右の距離がバランスしているものを優先
+    """
+    min_dist = min(dist_l, dist_r)
+    imbalance = abs(dist_l - dist_r)
+    probe_mid = (probe_start + probe_end) / 2.0
+    center = (product_size - 1) / 2.0
+    center_offset = abs(probe_mid - center)
+    return (min_dist * 0.2) - (imbalance * 0.5) - (center_offset * 0.2)
+
+
+def _score_candidate(
+    cand: PrimerPairCandidate, *, junction_spanning: bool, dist_l: int, dist_r: int, probe_mid: float, product_size: int
+) -> float:
     score = 0.0
     if cand.pair_penalty is not None:
         score += max(0.0, 10.0 - cand.pair_penalty)
     if junction_spanning:
         score += 5.0
-    # prefer probe close to primer 3' ends, but not too close (handled elsewhere)
-    score += max(0, 20 - min(dist_l, 20)) * 0.05
-    score += max(0, 20 - min(dist_r, 20)) * 0.05
+    # Prefer probe not too close to primer 3' ends (handled by min_probe_offset_bp),
+    # and prefer roughly central / balanced placement.
+    min_dist = min(dist_l, dist_r)
+    imbalance = abs(dist_l - dist_r)
+    center = (product_size - 1) / 2.0
+    center_offset = abs(probe_mid - center)
+    score += min(30.0, float(min_dist)) * 0.05
+    score -= min(60.0, float(imbalance)) * 0.02
+    score -= min(60.0, float(center_offset)) * 0.01
     return score
+
+
+def _dedup_primer_pairs(pairs: list[RankedPrimerPair]) -> list[RankedPrimerPair]:
+    if not pairs:
+        return pairs
+    best: dict[tuple[str, str, int, int, int], RankedPrimerPair] = {}
+    for p in pairs:
+        key = (p.left_seq, p.right_seq, int(p.left_start), int(p.right_start), int(p.product_size))
+        prev = best.get(key)
+        if prev is None:
+            best[key] = p
+            continue
+        if p.score > prev.score:
+            best[key] = p
+            continue
+        if p.score == prev.score:
+            if min(p.dist_left_3p_to_probe, p.dist_probe_to_right_3p) > min(
+                prev.dist_left_3p_to_probe, prev.dist_probe_to_right_3p
+            ):
+                best[key] = p
+                continue
+    out = list(best.values())
+    out.sort(key=lambda x: (-x.score, x.pair_penalty is None, x.pair_penalty or 1e9))
+    return out
 
 
 def _apply_exon_constraint_with_fallback(
@@ -594,6 +746,8 @@ def _maybe_add_specificity(
     inputs: DesignInputs,
     ensembl: EnsemblClient | None,
     warnings: list[str],
+    target_gene_symbol: str | None = None,
+    target_transcript_ids: set[str] | None = None,
     progress_cb: Callable[[float, str], None] | None = None,
 ) -> list[RankedPrimerPair]:
     if inputs.specificity_mode == "none":
@@ -608,9 +762,12 @@ def _maybe_add_specificity(
         warnings.append(f"Specificity: blastn が見つかりません: {inputs.blastn_path} / blastn not found")
         return pairs
 
+    target_tx_ids = target_transcript_ids if target_transcript_ids else None
     gene_cache: dict[str, str | None] = {}
 
     def _gene_symbol_for_transcript(tid: str) -> str | None:
+        if target_tx_ids is not None and target_gene_symbol and tid in target_tx_ids:
+            return target_gene_symbol
         if tid in gene_cache:
             return gene_cache[tid]
         if ensembl is None:
@@ -628,8 +785,40 @@ def _maybe_add_specificity(
     def _annotate_tx_amplicons(items: list[dict[str, Any]]) -> None:
         for a in items:
             tid = a.get("contig")
-            if isinstance(tid, str) and tid:
-                a["gene_symbol"] = _gene_symbol_for_transcript(tid)
+            if not isinstance(tid, str) or not tid:
+                continue
+            if target_tx_ids is not None:
+                if target_gene_symbol and tid in target_tx_ids:
+                    a["gene_symbol"] = target_gene_symbol
+                else:
+                    a["gene_symbol"] = None
+                continue
+            a["gene_symbol"] = _gene_symbol_for_transcript(tid)
+
+    def _effective_tx_product_count(items: list[dict[str, Any]]) -> int:
+        """
+        Transcriptome側のアンプリコン数の数え方:
+        - target_gene_symbol が分かる場合、同一遺伝子由来の複数variant(転写産物)は「1つの目的産物」として扱う
+        - それ以外（別遺伝子 or gene不明）は非特異的産物として個別にカウントする
+        """
+        if target_tx_ids is None and not target_gene_symbol:
+            return len(items)
+        target_seen = False
+        non_target = 0
+        for a in items:
+            tid = a.get("contig")
+            gene = a.get("gene_symbol")
+            is_target = False
+            if target_tx_ids is not None and isinstance(tid, str) and tid:
+                is_target = tid in target_tx_ids
+            elif target_gene_symbol:
+                is_target = bool(gene) and (gene == target_gene_symbol)
+            a["is_target_gene"] = is_target
+            if is_target:
+                target_seen = True
+            else:
+                non_target += 1
+        return (1 if target_seen else 0) + non_target
 
     def _evaluate_pair(p: RankedPrimerPair) -> RankedPrimerPair:
         if inputs.specificity_mode == "local_blast (in_silico_pcr)":
@@ -705,6 +894,7 @@ def _maybe_add_specificity(
             max_size=inputs.max_target_amplicon_size,
         )
         _annotate_tx_amplicons(tx_amplicons)
+        tx_products = _effective_tx_product_count(tx_amplicons)
         g_amplicons = _list_amplicon_products(
             left_hits=g_l_hits,
             right_hits=g_r_hits,
@@ -712,7 +902,6 @@ def _maybe_add_specificity(
             max_size=inputs.max_target_amplicon_size,
         )
         _annotate_tx_amplicons(g_amplicons)
-        tx_products = len(tx_amplicons)
         g_products = len(g_amplicons)
 
         penalty = 0.0

@@ -21,3 +21,6 @@ upl_finder_fast = "upl_finder_fast.cli:main"
 
 [tool.setuptools]
 packages = ["upl_finder_fast"]
+
+[tool.setuptools.package-data]
+upl_finder_fast = ["UPL_Finder.txt"]

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "upl_finder_rust"
+version = "0.1.0"
+description = "Fast UPL probe matcher (Rust + Python bindings)"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "upl_finder contributors" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Rust",
+  "Operating System :: POSIX :: Linux",
+]
+
+[tool.maturin]
+module-name = "upl_finder_rust"
+bindings = "pyo3"

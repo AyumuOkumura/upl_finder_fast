@@ -1,12 +1,12 @@
 [design]
-species = "mouse"
+species = "human"
 primer_tm_opt = 59.5
 primer_tm_min = 59.0
 primer_tm_max = 60.0
 primer_tm_diff_max = 3.0
 product_size_min = 60
 product_size_max = 150
-min_probe_offset_bp = 5
+min_probe_offset_bp = 10
 max_pairs = 50
 selected_transcript_id = ""
 
@@ -25,7 +25,10 @@ max_target_amplicon_size = 1000
 blastn_parallel_jobs = -1
 
 [paths]
-upl_probe_pkl = "roche_upl_sequences.pkl"
+upl_probe_tsv = "roche_upl_sequences.tsv"
+
+[runtime]
+rust = "auto"
 
 [output]
 out_dir = "upl_primer_probe"

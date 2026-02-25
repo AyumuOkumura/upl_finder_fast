@@ -7,11 +7,39 @@ from typing import Any
 
 import tomllib
 import sys
+import os
+import importlib.resources as importlib_resources
 
 from upl_finder_fast.ensembl import EnsemblClient, Species
 from upl_finder_fast.report import design_results_markdown
-from upl_finder_fast.upl import load_upl_probes
+from upl_finder_fast.upl import load_upl_probes, rust_extension_available, set_rust_mode
 from upl_finder_fast.workflow import DesignInputs, run_design_with_specificity_retries
+
+
+def _load_logo_text() -> str:
+    # Priority:
+    # 1) explicit env var
+    # 2) local package file (upl_finder_fast/UPL_Finder.txt)
+    # 3) packaged resources fallback
+    candidates: list[Path] = []
+    env = os.getenv("UPL_FINDER_LOGO_PATH")
+    if env:
+        candidates.append(Path(env))
+    candidates.append(Path(__file__).with_name("UPL_Finder.txt"))
+
+    for p in candidates:
+        try:
+            if p.is_file():
+                return p.read_text(encoding="utf-8").rstrip("\n")
+        except Exception:
+            pass
+
+    try:
+        return importlib_resources.files("upl_finder_fast").joinpath("UPL_Finder.txt").read_text(encoding="utf-8").rstrip(
+            "\n"
+        )
+    except Exception:
+        return "upl_finder_fast"
 
 
 def _read_fasta(path: Path) -> str:
@@ -69,7 +97,7 @@ def _build_inputs(cfg: dict[str, Any], base_dir: Path, input_type: str, raw_inpu
         primer_tm_diff_max=float(design.get("primer_tm_diff_max", 3.0)),
         product_size_min=int(design.get("product_size_min", 60)),
         product_size_max=int(design.get("product_size_max", 150)),
-        min_probe_offset_bp=int(design.get("min_probe_offset_bp", 5)),
+        min_probe_offset_bp=int(design.get("min_probe_offset_bp", 10)),
         max_pairs=int(design.get("max_pairs", 50)),
         selected_transcript_id=design.get("selected_transcript_id") or None,
         specificity_mode=str(spec.get("mode", "local_blast (in_silico_pcr)")),
@@ -87,20 +115,18 @@ def _build_inputs(cfg: dict[str, Any], base_dir: Path, input_type: str, raw_inpu
     )
 
 
+def _resolve_rust_mode(cfg: dict[str, Any], cli_mode: str | None) -> str:
+    if cli_mode is not None:
+        return cli_mode
+    runtime = cfg.get("runtime", {})
+    mode = str(runtime.get("rust", "auto")).strip().lower()
+    if mode not in {"auto", "on", "off"}:
+        raise ValueError(f"Unsupported runtime.rust mode: {mode}")
+    return mode
+
+
 def main() -> None:
-    print(
-        r"""
- _   _ _ _ _ _           __ _ _           _           
-| | | | | | | |         / _(_) |         | |          
-| | | | | | | |_  _ __ | |_ _| | ___  ___| | ___ _ __ 
-| | | | | | | | || '_ \|  _| | |/ _ \/ __| |/ _ \ '__|
-| |_| | | | | | || |_) | | | | |  __/ (__| |  __/ |   
- \___/|_|_|_|_|_|| .__/|_| |_|_|\___|\___|_|\___|_|   
-                 | |                                  
-                 |_|                                  
- upl_finder
-"""
-    )
+    print(_load_logo_text())
     p = argparse.ArgumentParser(description="Primer design CLI (UPL + specificity)")
     p.add_argument("--param", default="parameter.toml", help="Path to parameter.toml")
     g = p.add_mutually_exclusive_group(required=True)
@@ -108,15 +134,27 @@ def main() -> None:
     g.add_argument("--transcript", help="Ensembl transcript ID")
     g.add_argument("--seq", help="Target cDNA sequence")
     g.add_argument("--fasta", help="FASTA file path")
+    p.add_argument("--rust", choices=["auto", "on", "off"], help="Rust acceleration mode")
     p.add_argument("--output", help="Output markdown path (optional)")
     args = p.parse_args()
 
     param_path = Path(args.param)
     cfg = _load_params(param_path)
+    rust_mode = _resolve_rust_mode(cfg, args.rust)
+    set_rust_mode(rust_mode)
+    if rust_mode == "on" and not rust_extension_available():
+        raise RuntimeError(
+            "Rust mode 'on' was requested but upl_finder_rust is not available. "
+            "Build/install it from ./upl_finder_rust with maturin."
+        )
     paths = cfg.get("paths", {})
-    upl_pickle = _resolve_path(param_path.parent, paths.get("upl_probe_pkl", "roche_upl_sequences.pkl")) or Path(
-        "roche_upl_sequences.pkl"
+    upl_probe_value = (
+        paths.get("upl_probe_tsv")
+        or paths.get("upl_probe_path")
+        or paths.get("upl_probe_pkl")  # backward compat
+        or "roche_upl_sequences.tsv"
     )
+    upl_probe_path = _resolve_path(param_path.parent, str(upl_probe_value)) or Path("roche_upl_sequences.tsv")
 
     if args.gene:
         input_type = "Gene symbol"
@@ -138,7 +176,7 @@ def main() -> None:
 
     inputs = _build_inputs(cfg, param_path.parent, input_type=input_type, raw_input=raw_input)
     ensembl = EnsemblClient()
-    upl_probes = load_upl_probes(str(upl_pickle))
+    upl_probes = load_upl_probes(str(upl_probe_path))
 
     last_pct: float | None = None
     last_msg: str | None = None
