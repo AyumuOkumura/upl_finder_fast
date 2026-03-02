@@ -97,12 +97,12 @@ When `[specificity].mode != "none"`, BLAST+ (`blastn`) evaluates off-targets aga
 
 ```bash
 git clone https://github.com/AyumuOkumura/upl_finder_fast
-cd upl_finder_fast_repo
+cd upl_finder_fast
 conda env create -f environment.yml
 conda activate upl_finder_fast
 ```
 
-注意: `environment.yml` の `pip:` に `-e .`（このリポジトリを editable install）を含むため、**必ず `upl_finder_fast_repo/` に `cd` した状態で** `conda env create -f environment.yml` を実行してください。  
+注意: `environment.yml` の `pip:` に `-e .`（このリポジトリを editable install）を含むため、**必ず `upl_finder_fast/` に `cd` した状態で** `conda env create -f environment.yml` を実行してください。  
 If you run `conda env create` from another directory, `-e .` may point to the wrong path and you may end up running an older CLI.
 
 （任意）Rust拡張を使う場合:
