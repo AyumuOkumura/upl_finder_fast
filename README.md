@@ -148,13 +148,13 @@ This repository is organized for **CLI-first usage**. Rust on/off can be selecte
 
 ```bash
 # auto (default): 利用可能ならRust、無ければPython
-upl_finder_fast --param parameter.toml --rust auto --gene GAPDH
+upl_finder_fast --param parameter.toml --rust auto --refseq NM_000546
 
 # Rustを必須化（拡張未インストール時はエラー）
-upl_finder_fast --param parameter.toml --rust on --gene GAPDH
+upl_finder_fast --param parameter.toml --rust on --refseq NM_000546
 
 # Rustを使わずPython実装のみ
-upl_finder_fast --param parameter.toml --rust off --gene GAPDH
+upl_finder_fast --param parameter.toml --rust off --refseq NM_000546
 ```
 
 - `parameter.toml` の `[runtime].rust = "auto|on|off"` でも設定可能です（CLI引数が優先）。
