@@ -143,6 +143,7 @@ class DesignResult:
     specificity_params: dict[str, Any] | None = None
     design_started_at: str | None = None
     design_elapsed_sec: float | None = None
+    rust_used: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -153,6 +154,7 @@ class DesignResult:
             "specificity_params": self.specificity_params,
             "design_started_at": self.design_started_at,
             "design_elapsed_sec": self.design_elapsed_sec,
+            "rust_used": self.rust_used,
         }
 
 
@@ -248,6 +250,7 @@ def run_design_workflow(
     boundaries = _cdna_exon_boundaries(transcript_details) if transcript_details is not None else []
 
     ranked: list[RankedPrimerPair] = []
+    rust_used = False
     rust_rows = rank_candidates_with_rust(
         template=template,
         upl_probes=upl_probes,
@@ -256,7 +259,23 @@ def run_design_workflow(
         min_probe_offset_bp=inputs.min_probe_offset_bp,
     )
     if rust_rows is not None:
+        # Apply min_probe_tm_delta filter here to keep parity with the Python path,
+        # because the Rust rank_candidates does not perform this check.
+        if inputs.min_probe_tm_delta > 0.0:
+            def _passes_probe_tm_delta(row: dict[str, Any]) -> bool:
+                tm_l = row.get("tm_left")
+                tm_r = row.get("tm_right")
+                if tm_l is None or tm_r is None:
+                    return True
+                probe_seq = str(row.get("upl_probe_seq", ""))
+                if not probe_seq:
+                    return True
+                probe_tm = _probe_tm_wallace(probe_seq)
+                avg_primer_tm = (float(tm_l) + float(tm_r)) / 2.0
+                return probe_tm - avg_primer_tm >= inputs.min_probe_tm_delta
+            rust_rows = [row for row in rust_rows if _passes_probe_tm_delta(row)]
         ranked = [_ranked_pair_from_rust_row(row) for row in rust_rows]
+        rust_used = True
         if progress_cb is not None:
             progress_cb(60.0, "Matching UPL probes...")
     else:
@@ -416,6 +435,7 @@ def run_design_workflow(
         pairs=ranked,
         warnings=warnings,
         specificity_params=spec_params,
+        rust_used=rust_used,
     )
 
 
