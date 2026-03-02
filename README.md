@@ -96,7 +96,7 @@ When `[specificity].mode != "none"`, BLAST+ (`blastn`) evaluates off-targets aga
 ### Step-by-step (GitHub公開後の利用想定)
 
 ```bash
-git clone <YOUR_GITHUB_REPO_URL>
+git clone https://github.com/AyumuOkumura/upl_finder_fast/tree/main
 cd upl_finder_fast_repo
 conda env create -f environment.yml
 conda activate upl_finder_fast
