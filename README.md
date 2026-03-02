@@ -118,10 +118,8 @@ Without `maturin`, CLI still works and falls back to Python implementation.
 ## 実行 / Run
 
 ```bash
-upl_finder_fast --param parameter.toml --gene GAPDH
+upl_finder_fast --param parameter.toml --refseq NM_000546
 ```
-
-Run (English): same as above.
 
 Other inputs / その他の入力例:
 
