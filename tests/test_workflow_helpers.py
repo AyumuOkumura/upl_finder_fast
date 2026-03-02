@@ -8,6 +8,7 @@ from upl_finder_fast.workflow import (
     _has_poly_run,
     _junction_flags,
     _normalize_seq,
+    _poly_run_filter_len,
     _probe_preference,
     _score_candidate,
     _MAX_SPECIFICITY_RETRIES,
@@ -83,6 +84,17 @@ def test_has_poly_run_single_char():
 def test_has_poly_run_run_len_4_exact():
     assert _has_poly_run("AAAA") is True
     assert _has_poly_run("AAA") is False
+
+
+# ---------------------------------------------------------------------------
+# _poly_run_filter_len
+# ---------------------------------------------------------------------------
+
+def test_poly_run_filter_len_matches_primer3_max_poly_x():
+    # PRIMER_MAX_POLY_X=3 -> reject 4+ runs
+    assert _poly_run_filter_len(3) == 4
+    # PRIMER_MAX_POLY_X=4 -> reject 5+ runs (allow 4-run, e.g. Roche official example)
+    assert _poly_run_filter_len(4) == 5
 
 
 # ---------------------------------------------------------------------------
@@ -247,5 +259,4 @@ def test_design_result_markdown_shows_rust_used_true():
     r = _make_design_result(rust_used=True)
     md = design_result_markdown(r)
     assert "Rust implementation used: `True`" in md
-
 

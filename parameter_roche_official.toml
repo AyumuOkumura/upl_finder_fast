@@ -1,0 +1,30 @@
+[design]
+species = "human"
+primer_tm_opt = 60.0
+primer_tm_min = 59.0
+primer_tm_max = 61.0
+primer_tm_diff_max = 3.0
+product_size_min = 60
+product_size_max = 150
+
+# Roche_official.csv に近い「probe近接」を許容するため小さめに設定。
+# 0 = 隣接OK（ただし primer/probe の重複は常に除外）。
+min_probe_offset_bp = 2
+
+# Roche_official.csv には poly-run 4連を含む例があるため、4を許容。
+primer_max_poly_x = 4
+
+max_pairs = 50
+selected_transcript_id = ""
+
+[specificity]
+mode = "none"
+
+[paths]
+upl_probe_tsv = "roche_upl_sequences.tsv"
+
+[runtime]
+rust = "auto"
+
+[output]
+out_dir = "upl_primer_probe"

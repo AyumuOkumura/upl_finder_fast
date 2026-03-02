@@ -34,6 +34,7 @@ class DesignInputs:
     product_size_min: int
     product_size_max: int
     min_probe_offset_bp: int
+    primer_max_poly_x: int = 3
     max_pairs: int
     selected_transcript_id: str | None = None
     specificity_mode: str = "none"
@@ -243,6 +244,7 @@ def run_design_workflow(
         primer_tm_min=inputs.primer_tm_min,
         primer_tm_max=inputs.primer_tm_max,
         primer_tm_diff_max=inputs.primer_tm_diff_max,
+        primer_max_poly_x=inputs.primer_max_poly_x,
         max_pairs=inputs.max_pairs,
     )
 
@@ -256,6 +258,7 @@ def run_design_workflow(
         candidates=[asdict(c) for c in candidates],
         exon_boundaries=boundaries,
         min_probe_offset_bp=inputs.min_probe_offset_bp,
+        primer_max_poly_x=inputs.primer_max_poly_x,
     )
     if rust_rows is not None:
         ranked = [_ranked_pair_from_rust_row(row) for row in rust_rows]
@@ -272,7 +275,10 @@ def run_design_workflow(
 
             if _has_3p_gc_run(cand.left_seq) or _has_3p_gc_run(cand.right_seq):
                 continue
-            if _has_poly_run(cand.left_seq) or _has_poly_run(cand.right_seq):
+            poly_filter_len = _poly_run_filter_len(inputs.primer_max_poly_x)
+            if _has_poly_run(cand.left_seq, run_len=poly_filter_len) or _has_poly_run(
+                cand.right_seq, run_len=poly_filter_len
+            ):
                 continue
 
             hits = find_upl_matches(amplicon, upl_probes)
@@ -715,6 +721,22 @@ def _has_poly_run(seq: str, run_len: int = 4) -> bool:
             last = ch
             count = 1
     return False
+
+
+def _poly_run_filter_len(primer_max_poly_x: int) -> int:
+    """
+    Primer3の PRIMER_MAX_POLY_X (=許容する同一塩基連続長) に合わせて、
+    追加フィルタで弾くしきい値（run_len）を決める。
+
+    例:
+      - PRIMER_MAX_POLY_X=3 のとき、4連以上を弾く => run_len=4
+      - PRIMER_MAX_POLY_X=4 のとき、5連以上を弾く => run_len=5
+    """
+    n = int(primer_max_poly_x)
+    if n < 0:
+        n = 0
+    # run_len=1 would reject any non-empty sequence, so keep it at least 2.
+    return max(2, n + 1)
 
 
 def _resolve_parallel_jobs(n: int) -> int:

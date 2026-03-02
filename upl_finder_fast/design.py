@@ -36,6 +36,7 @@ def design_primers_primer3(
     primer_tm_min: float,
     primer_tm_max: float,
     primer_tm_diff_max: float,
+    primer_max_poly_x: int = 3,
     max_pairs: int,
 ) -> list[PrimerPairCandidate]:
     if primer3 is None:
@@ -56,7 +57,7 @@ def design_primers_primer3(
         "PRIMER_MIN_GC": 30.0,
         "PRIMER_MAX_GC": 80.0,
         "PRIMER_GC_CLAMP": 0,
-        "PRIMER_MAX_POLY_X": 3,
+        "PRIMER_MAX_POLY_X": int(primer_max_poly_x),
         "PRIMER_MAX_SELF_ANY": 8.0,
         "PRIMER_MAX_SELF_END": 3.0,
         "PRIMER_PAIR_MAX_COMPL_ANY": 8.0,
