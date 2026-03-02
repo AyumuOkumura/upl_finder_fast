@@ -265,6 +265,7 @@ def filter_hits_in_silico(
     min_mismatches_3p: int,
     three_prime_window: int,
     ignore_mismatches_total_ge: int,
+    require_terminal_mismatch: bool = False,
 ) -> list[BlastHit]:
     """
     Filter BLAST hits to identify primers that could cause off-target amplification.
@@ -280,6 +281,9 @@ def filter_hits_in_silico(
     
     Hits with excessive mismatches (>= ignore_mismatches_total_ge) are also
     filtered as they're unlikely to amplify under any conditions.
+    
+    If require_terminal_mismatch=True, hits with a perfect 3'-terminal base match
+    are always retained as potential off-targets, regardless of mismatch counts.
     """
     out: list[BlastHit] = []
     for h in hits:
@@ -295,7 +299,8 @@ def filter_hits_in_silico(
         if mismatch_total >= ignore_mismatches_total_ge:
             continue
         if (mismatch_total >= min_mismatches_total) and (mismatch_3p >= min_mismatches_3p):
-            continue
+            if not (require_terminal_mismatch and terminal_match):
+                continue
         out.append(
             BlastHit(
                 sseqid=h.sseqid,

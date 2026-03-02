@@ -182,6 +182,12 @@ def design_result_markdown(
         lines.append("| Key | Value |")
         lines.append("| --- | --- |")
         upl_tm = _probe_tm_simple(getattr(p, "upl_probe_seq", "") or "")
+        tm_left = getattr(p, "tm_left", None)
+        tm_right = getattr(p, "tm_right", None)
+        if tm_left is not None and tm_right is not None:
+            upl_tm_delta: float | None = upl_tm - (tm_left + tm_right) / 2.0
+        else:
+            upl_tm_delta = None
         for key in [
             "left_seq",
             "right_seq",
@@ -222,6 +228,8 @@ def design_result_markdown(
                 value = _round_1dp_half_up(float(value))
             lines.append(f"| `{key}` | `{value}` |")
         lines.append(f"| `upl_probe_tm` | `{upl_tm:.1f}` |")
+        if upl_tm_delta is not None:
+            lines.append(f"| `upl_probe_tm_delta` | `{upl_tm_delta:.1f}` |")
         lines.append("")
         lines.append("**Amplicon diagram (relative) / 位置の簡易図**")
         lines.append("```text")

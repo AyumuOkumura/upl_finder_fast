@@ -48,6 +48,8 @@ class DesignInputs:
     ignore_mismatches_total_ge: int = 6
     max_target_amplicon_size: int = 1000
     blastn_parallel_jobs: int = 0
+    min_probe_tm_delta: float = 8.0  # probe Tm must exceed avg primer Tm by this amount
+    require_terminal_mismatch: bool = False  # if True, hits with a perfect 3'-terminal base match are always retained as potential off-targets
 
 
 @dataclass(frozen=True)
@@ -301,6 +303,14 @@ def run_design_workflow(
                 dist_r = right_3p - int(hit.end) - 1
                 if dist_l < inputs.min_probe_offset_bp or dist_r < inputs.min_probe_offset_bp:
                     continue
+
+                # Filter: probe Tm must exceed avg primer Tm by min_probe_tm_delta
+                if cand.tm_left is not None and cand.tm_right is not None and inputs.min_probe_tm_delta > 0.0:
+                    probe_tm = _probe_tm_wallace(str(getattr(hit, "probe_seq", "")))
+                    avg_primer_tm = (cand.tm_left + cand.tm_right) / 2.0
+                    if probe_tm - avg_primer_tm < inputs.min_probe_tm_delta:
+                        continue  # skip: probe Tm not sufficiently higher than primer Tm
+
                 pref = _probe_preference(
                     product_size=cand.product_size,
                     probe_start=int(hit.start),
@@ -666,6 +676,18 @@ def _apply_exon_constraint_with_fallback(
     return pairs
 
 
+def _probe_tm_wallace(seq: str) -> float:
+    """
+    Estimate probe Tm using the Wallace rule: Tm = 2(A+T) + 4(G+C).
+    NOTE: This is an approximation for unmodified DNA oligos.
+    LNA-modified probes (e.g., Roche UPL) have higher actual Tm values
+    due to LNA modifications (~+3 to +8°C per LNA base). This value
+    should be treated as a lower-bound estimate only.
+    """
+    s = seq.upper()
+    return float(2 * (s.count("A") + s.count("T")) + 4 * (s.count("G") + s.count("C")))
+
+
 def _has_3p_gc_run(seq: str, run_len: int = 3) -> bool:
     """
     Check if primer has consecutive G/C bases at 3' end.
@@ -866,6 +888,7 @@ def _maybe_add_specificity(
                 min_mismatches_3p=inputs.min_mismatches_3p,
                 three_prime_window=inputs.three_prime_window,
                 ignore_mismatches_total_ge=inputs.ignore_mismatches_total_ge,
+                require_terminal_mismatch=inputs.require_terminal_mismatch,
             )
             tx_r_hits = filter_hits_in_silico(
                 hits=tx_r_hits_raw,
@@ -874,6 +897,7 @@ def _maybe_add_specificity(
                 min_mismatches_3p=inputs.min_mismatches_3p,
                 three_prime_window=inputs.three_prime_window,
                 ignore_mismatches_total_ge=inputs.ignore_mismatches_total_ge,
+                require_terminal_mismatch=inputs.require_terminal_mismatch,
             )
             g_l_hits = filter_hits_in_silico(
                 hits=g_l_hits_raw,
@@ -882,6 +906,7 @@ def _maybe_add_specificity(
                 min_mismatches_3p=inputs.min_mismatches_3p,
                 three_prime_window=inputs.three_prime_window,
                 ignore_mismatches_total_ge=inputs.ignore_mismatches_total_ge,
+                require_terminal_mismatch=inputs.require_terminal_mismatch,
             )
             g_r_hits = filter_hits_in_silico(
                 hits=g_r_hits_raw,
@@ -890,6 +915,7 @@ def _maybe_add_specificity(
                 min_mismatches_3p=inputs.min_mismatches_3p,
                 three_prime_window=inputs.three_prime_window,
                 ignore_mismatches_total_ge=inputs.ignore_mismatches_total_ge,
+                require_terminal_mismatch=inputs.require_terminal_mismatch,
             )
         elif inputs.specificity_mode == "local_blast (exact match count)":
             tx_l_hits = _exact_hits(

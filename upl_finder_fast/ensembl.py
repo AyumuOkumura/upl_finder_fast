@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import time
+import warnings as _warnings_module
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -42,6 +43,38 @@ class EnsemblClient:
         self.base_url = base_url.rstrip("/")
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._ensembl_release: str = self._get_ensembl_release()
+        self._check_cache_release()
+
+    def _get_ensembl_release(self) -> str:
+        """Fetch current Ensembl release number from REST API."""
+        try:
+            r = requests.get(
+                f"{self.base_url}/info/software",
+                headers={"Content-Type": "application/json"},
+                timeout=10,
+            )
+            if r.status_code == 200:
+                return str(r.json().get("release", "unknown"))
+        except Exception:
+            pass
+        return "unknown"
+
+    def _check_cache_release(self) -> None:
+        """Warn if cached data was built against a different Ensembl release."""
+        release_file = self.cache_dir / "ensembl_release.txt"
+        if release_file.exists():
+            cached_release = release_file.read_text(encoding="utf-8").strip()
+            if cached_release != self._ensembl_release and self._ensembl_release != "unknown":
+                _warnings_module.warn(
+                    f"Ensembl release mismatch: cache was built with release "
+                    f"{cached_release}, current release is {self._ensembl_release}. "
+                    f"Delete '{self.cache_dir}' to rebuild with current annotations.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        if self._ensembl_release != "unknown":
+            release_file.write_text(self._ensembl_release, encoding="utf-8")
 
     def resolve_refseq_mrna_to_ensembl_transcript(self, species: Species, refseq_id: str) -> tuple[str, list[str]]:
         """
