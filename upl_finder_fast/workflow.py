@@ -34,8 +34,8 @@ class DesignInputs:
     product_size_min: int
     product_size_max: int
     min_probe_offset_bp: int
-    primer_max_poly_x: int = 3
     max_pairs: int
+    primer_max_poly_x: int = 3
     selected_transcript_id: str | None = None
     specificity_mode: str = "none"
     blastn_path: str = "blastn"
