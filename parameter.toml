@@ -7,6 +7,9 @@ primer_tm_diff_max = 3.0
 product_size_min = 60
 product_size_max = 150
 min_probe_offset_bp = 10
+min_probe_tm_delta = 8.0   # probe Tm (Wallace rule) must exceed avg primer Tm by >= this value
+                            # Note: Wallace rule underestimates LNA probe Tm; treat as conservative lower bound
+                            # Set to 0.0 to disable this filter
 max_pairs = 50
 selected_transcript_id = ""
 
@@ -34,6 +37,7 @@ three_prime_window = 5
 ignore_mismatches_total_ge = 6
 max_target_amplicon_size = 1000
 blastn_parallel_jobs = -1
+require_terminal_mismatch = false  # if true, hits with a perfect 3'-terminal base match are always retained as potential off-targets
 
 [paths]
 upl_probe_tsv = "roche_upl_sequences.tsv"
