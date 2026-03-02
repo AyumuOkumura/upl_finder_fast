@@ -112,7 +112,6 @@ def _build_inputs(cfg: dict[str, Any], base_dir: Path, input_type: str, raw_inpu
         ignore_mismatches_total_ge=int(spec.get("ignore_mismatches_total_ge", 6)),
         max_target_amplicon_size=int(spec.get("max_target_amplicon_size", 1000)),
         blastn_parallel_jobs=int(spec.get("blastn_parallel_jobs", -1)),
-        min_probe_tm_delta=float(design.get("min_probe_tm_delta", 8.0)),
         require_terminal_mismatch=bool(spec.get("require_terminal_mismatch", False)),
     )
 

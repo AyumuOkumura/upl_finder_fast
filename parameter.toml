@@ -7,9 +7,6 @@ primer_tm_diff_max = 3.0
 product_size_min = 60
 product_size_max = 150
 min_probe_offset_bp = 10
-min_probe_tm_delta = 8.0   # probe Tm (Wallace rule) must exceed avg primer Tm by >= this value
-                            # Note: Wallace rule underestimates LNA probe Tm; treat as conservative lower bound
-                            # Set to 0.0 to disable this filter
 max_pairs = 50
 selected_transcript_id = ""
 
