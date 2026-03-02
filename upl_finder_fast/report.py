@@ -124,11 +124,13 @@ def design_result_markdown(
     lines.append(f"Species: `{species_value}`")
     started_at = getattr(result, "design_started_at", None)
     elapsed_sec = getattr(result, "design_elapsed_sec", None)
+    rust_used = getattr(result, "rust_used", False)
     if started_at:
         lines.append(f"Design started at: `{started_at}`")
     if elapsed_sec is not None:
         elapsed_min = float(elapsed_sec) / 60.0
         lines.append(f"Design elapsed (min): `{elapsed_min:.2f}`")
+    lines.append(f"Rust implementation used: `{rust_used}`")
     lines.append("")
     lines.append("**Transcript Info**")
     lines.append("| Key | Value |")

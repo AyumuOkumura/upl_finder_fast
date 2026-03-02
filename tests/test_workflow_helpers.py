@@ -12,7 +12,9 @@ from upl_finder_fast.workflow import (
     _probe_tm_wallace,
     _score_candidate,
     _MAX_SPECIFICITY_RETRIES,
+    DesignResult,
 )
+from upl_finder_fast.ensembl import Species
 from upl_finder_fast.design import PrimerPairCandidate
 
 
@@ -189,6 +191,63 @@ def test_score_candidate_no_penalty_field():
 def test_max_specificity_retries_positive():
     assert isinstance(_MAX_SPECIFICITY_RETRIES, int)
     assert _MAX_SPECIFICITY_RETRIES > 0
+
+
+# ---------------------------------------------------------------------------
+# DesignResult.rust_used field
+# ---------------------------------------------------------------------------
+
+def _make_design_result(**kwargs) -> DesignResult:
+    defaults = dict(
+        species=Species.HUMAN,
+        transcript_info=None,
+        pairs=[],
+        warnings=[],
+    )
+    defaults.update(kwargs)
+    return DesignResult(**defaults)
+
+
+def test_design_result_rust_used_defaults_false():
+    r = _make_design_result()
+    assert r.rust_used is False
+
+
+def test_design_result_rust_used_can_be_set_true():
+    r = _make_design_result(rust_used=True)
+    assert r.rust_used is True
+
+
+def test_design_result_to_dict_includes_rust_used_false():
+    r = _make_design_result()
+    d = r.to_dict()
+    assert "rust_used" in d
+    assert d["rust_used"] is False
+
+
+def test_design_result_to_dict_includes_rust_used_true():
+    r = _make_design_result(rust_used=True)
+    d = r.to_dict()
+    assert d["rust_used"] is True
+
+
+# ---------------------------------------------------------------------------
+# design_result_markdown rust_used output
+# ---------------------------------------------------------------------------
+
+from upl_finder_fast.report import design_result_markdown
+
+
+def test_design_result_markdown_shows_rust_used_false():
+    r = _make_design_result(rust_used=False)
+    md = design_result_markdown(r)
+    assert "Rust implementation used: `False`" in md
+
+
+def test_design_result_markdown_shows_rust_used_true():
+    r = _make_design_result(rust_used=True)
+    md = design_result_markdown(r)
+    assert "Rust implementation used: `True`" in md
 
 
 # ---------------------------------------------------------------------------
