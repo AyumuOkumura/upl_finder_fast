@@ -9,7 +9,7 @@
 
 # upl_finder_fast
 
-高速版のCLIパッケージです（Rust拡張が利用可能な場合は自動で使用します）。Fast CLI for qPCR primer + Roche UPL probe design with optional Rust acceleration.
+Rpche Universal Probe Library のprimer-probeを設計するための、CLIパッケージです（Rust拡張が利用可能な場合は自動で使用します）。Fast CLI for qPCR primer + Roche UPL probe design with optional Rust acceleration.
 
 ## Overview / 概要
 - ターゲット決定: 遺伝子記号・Ensembl Transcript ID・cDNA配列（貼り付け/FASTA）を受け取り、必要なら Ensembl API から cDNA を取得して正規化します。  
