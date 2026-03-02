@@ -4,15 +4,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any
 
 
-def _probe_tm_simple(seq: str) -> float:
-    s = seq.upper()
-    a = s.count("A")
-    t = s.count("T")
-    g = s.count("G")
-    c = s.count("C")
-    return float(2 * (a + t) + 4 * (g + c))
-
-
 def _round_1dp_half_up(v: float) -> str:
     return str(Decimal(str(v)).quantize(Decimal("0.0"), rounding=ROUND_HALF_UP))
 
@@ -97,7 +88,7 @@ def _field_descriptions_lines() -> list[str]:
         "- `pairs[].left_len/right_len`: プライマー長 / Primer length",
         "- `pairs[].amplicon_start/amplicon_end`: 産物位置 / Amplicon position",
         "- `pairs[].tx_*`/`genome_*`: 特異性情報 / Specificity info",
-        "- `pairs[].upl_probe_id/seq/tm`: UPL probe情報 / UPL probe info",
+        "- `pairs[].upl_probe_id/seq`: UPL probe情報 / UPL probe info",
         "- `pairs[].upl_probe_strand`: probeの向き（amplicon内の一致方向） / Probe match strand within amplicon",
         "- `specificity_params.min_mismatches_total`: ミスマッチ下限(全体) / Min mismatches (total)",
         "- `specificity_params.min_mismatches_3p`: 3'窓ミスマッチ下限 / Min mismatches (3' window)",
@@ -183,13 +174,6 @@ def design_result_markdown(
         lines.append(f"**Pair {i}**")
         lines.append("| Key | Value |")
         lines.append("| --- | --- |")
-        upl_tm = _probe_tm_simple(getattr(p, "upl_probe_seq", "") or "")
-        tm_left = getattr(p, "tm_left", None)
-        tm_right = getattr(p, "tm_right", None)
-        if tm_left is not None and tm_right is not None:
-            upl_tm_delta: float | None = upl_tm - (tm_left + tm_right) / 2.0
-        else:
-            upl_tm_delta = None
         for key in [
             "left_seq",
             "right_seq",
@@ -229,9 +213,6 @@ def design_result_markdown(
             if key in {"tm_left", "tm_right"} and isinstance(value, (int, float)):
                 value = _round_1dp_half_up(float(value))
             lines.append(f"| `{key}` | `{value}` |")
-        lines.append(f"| `upl_probe_tm` | `{upl_tm:.1f}` |")
-        if upl_tm_delta is not None:
-            lines.append(f"| `upl_probe_tm_delta` | `{upl_tm_delta:.1f}` |")
         lines.append("")
         lines.append("**Amplicon diagram (relative) / 位置の簡易図**")
         lines.append("```text")

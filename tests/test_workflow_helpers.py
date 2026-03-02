@@ -9,7 +9,6 @@ from upl_finder_fast.workflow import (
     _junction_flags,
     _normalize_seq,
     _probe_preference,
-    _probe_tm_wallace,
     _score_candidate,
     _MAX_SPECIFICITY_RETRIES,
     DesignResult,
@@ -250,29 +249,3 @@ def test_design_result_markdown_shows_rust_used_true():
     assert "Rust implementation used: `True`" in md
 
 
-# ---------------------------------------------------------------------------
-# _probe_tm_wallace
-# ---------------------------------------------------------------------------
-
-def test_probe_tm_wallace_basic():
-    # ACGT: 2*(1+1) + 4*(1+1) = 4 + 8 = 12
-    assert _probe_tm_wallace("ACGT") == 12.0
-
-
-def test_probe_tm_wallace_all_at():
-    # AAATTT: 2*6 = 12
-    assert _probe_tm_wallace("AAATTT") == 12.0
-
-
-def test_probe_tm_wallace_all_gc():
-    # GGCC: 4*4 = 16
-    assert _probe_tm_wallace("GGCC") == 16.0
-
-
-def test_probe_tm_wallace_lowercase():
-    # lowercase input should be handled
-    assert _probe_tm_wallace("acgt") == 12.0
-
-
-def test_probe_tm_wallace_empty():
-    assert _probe_tm_wallace("") == 0.0
