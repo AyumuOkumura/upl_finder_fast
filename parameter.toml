@@ -7,6 +7,7 @@ primer_tm_diff_max = 3.0
 product_size_min = 60
 product_size_max = 150
 min_probe_offset_bp = 10
+primer_max_poly_x = 3
 max_pairs = 50
 selected_transcript_id = ""
 

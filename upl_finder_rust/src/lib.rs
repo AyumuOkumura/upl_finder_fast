@@ -462,6 +462,7 @@ fn evaluate_candidate(
     template: &str,
     boundaries: &[i64],
     min_probe_offset_bp: i64,
+    poly_run_filter_len: usize,
     ac: &AhoCorasick,
     probes: &[Probe],
     pattern_meta: &[PatternMeta],
@@ -490,7 +491,9 @@ fn evaluate_candidate(
     if has_3p_gc_run(&cand.left_seq, 3) || has_3p_gc_run(&cand.right_seq, 3) {
         return None;
     }
-    if has_poly_run(&cand.left_seq, 4) || has_poly_run(&cand.right_seq, 4) {
+    if has_poly_run(&cand.left_seq, poly_run_filter_len)
+        || has_poly_run(&cand.right_seq, poly_run_filter_len)
+    {
         return None;
     }
 
@@ -605,6 +608,7 @@ fn rank_candidates_impl(
     candidates: &[Candidate],
     boundaries: &[i64],
     min_probe_offset_bp: i64,
+    primer_max_poly_x: i64,
 ) -> Vec<RankedResult> {
     if probes.is_empty() || candidates.is_empty() {
         return Vec::new();
@@ -614,6 +618,9 @@ fn rank_candidates_impl(
         return Vec::new();
     };
     let template = normalize_seq(template);
+    let poly_run_filter_len = usize::try_from((primer_max_poly_x.max(0)) + 1)
+        .unwrap_or(4)
+        .max(2);
 
     let ranked: Vec<RankedResult> = candidates
         .par_iter()
@@ -623,6 +630,7 @@ fn rank_candidates_impl(
                 &template,
                 boundaries,
                 min_probe_offset_bp,
+                poly_run_filter_len,
                 &ac,
                 probes,
                 &pattern_meta,
@@ -736,7 +744,7 @@ fn find_upl_matches_from_pickle(sequence: &str, probes_path: &str) -> PyResult<V
     find_upl_matches_from_file(sequence, probes_path)
 }
 
-#[pyfunction(signature = (template, probes, candidates, exon_boundaries=None, min_probe_offset_bp=None))]
+#[pyfunction(signature = (template, probes, candidates, exon_boundaries=None, min_probe_offset_bp=None, primer_max_poly_x=None))]
 fn rank_candidates(
     py: Python<'_>,
     template: &str,
@@ -744,6 +752,7 @@ fn rank_candidates(
     candidates: &Bound<'_, PyAny>,
     exon_boundaries: Option<Vec<i64>>,
     min_probe_offset_bp: Option<i64>,
+    primer_max_poly_x: Option<i64>,
 ) -> PyResult<Vec<Py<PyDict>>> {
     let parsed_probes = parse_probes_from_py(probes)?;
     let parsed_candidates = parse_candidates_from_py(candidates)?;
@@ -755,6 +764,7 @@ fn rank_candidates(
         &parsed_candidates,
         &boundaries,
         min_probe_offset_bp.unwrap_or(0),
+        primer_max_poly_x.unwrap_or(3),
     );
 
     ranked.iter().map(|r| ranked_to_pydict(py, r)).collect()
@@ -836,6 +846,7 @@ mod tests {
             &candidates,
             &[],
             2,
+            3,
         );
 
         assert_eq!(ranked.len(), 1);
@@ -867,15 +878,15 @@ mod tests {
         }];
 
         // Overlaps left primer region [0..5]
-        let ranked_left = rank_candidates_impl("AACCCCAAAAAAAAAAAAAA", &probes, &candidates, &[], 0);
+        let ranked_left = rank_candidates_impl("AACCCCAAAAAAAAAAAAAA", &probes, &candidates, &[], 0, 3);
         assert_eq!(ranked_left.len(), 0);
 
         // Overlaps right primer region [14..19]
-        let ranked_right = rank_candidates_impl("AAAAAAAAAAAAAAACCCCA", &probes, &candidates, &[], 0);
+        let ranked_right = rank_candidates_impl("AAAAAAAAAAAAAAACCCCA", &probes, &candidates, &[], 0, 3);
         assert_eq!(ranked_right.len(), 0);
 
         // Internal probe is allowed when offset=0 (adjacent is 0bp, overlap is rejected above)
-        let ranked_ok = rank_candidates_impl("AAAAAAAACCCCAAAAAAAA", &probes, &candidates, &[], 0);
+        let ranked_ok = rank_candidates_impl("AAAAAAAACCCCAAAAAAAA", &probes, &candidates, &[], 0, 3);
         assert_eq!(ranked_ok.len(), 1);
         assert_eq!(ranked_ok[0].probe_start_in_amplicon, 8);
         assert_eq!(ranked_ok[0].probe_end_in_amplicon, 11);

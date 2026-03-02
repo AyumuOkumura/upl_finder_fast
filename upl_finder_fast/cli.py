@@ -87,6 +87,9 @@ def _build_inputs(cfg: dict[str, Any], base_dir: Path, input_type: str, raw_inpu
     species = _species_from_str(str(design.get("species", "human")))
     tx_db = _resolve_path(base_dir, spec.get("transcriptome_blast_db") or None)
     g_db = _resolve_path(base_dir, spec.get("genome_blast_db") or None)
+    primer_max_poly_x = int(design.get("primer_max_poly_x", 3))
+    if primer_max_poly_x < 1:
+        raise ValueError("design.primer_max_poly_x must be >= 1")
     return DesignInputs(
         species=species,
         input_type=input_type,
@@ -98,6 +101,7 @@ def _build_inputs(cfg: dict[str, Any], base_dir: Path, input_type: str, raw_inpu
         product_size_min=int(design.get("product_size_min", 60)),
         product_size_max=int(design.get("product_size_max", 150)),
         min_probe_offset_bp=int(design.get("min_probe_offset_bp", 10)),
+        primer_max_poly_x=primer_max_poly_x,
         max_pairs=int(design.get("max_pairs", 50)),
         selected_transcript_id=design.get("selected_transcript_id") or None,
         specificity_mode=str(spec.get("mode", "local_blast (in_silico_pcr)")),

@@ -46,6 +46,7 @@ Primer3 (`primer3-py`) generates candidate primer pairs.
 主な制約（`parameter.toml` の `[design]`）:
 - 産物長（`product_size_min`〜`product_size_max`）
 - Tm（`primer_tm_*` と `primer_tm_diff_max`）
+- poly-run（同一塩基連続）の上限（`primer_max_poly_x`。デフォルト=3）
 - 追加の簡易フィルタ: 3'端のGC連続、poly-run などは除外  
   Additional filters: 3' GC runs, poly-runs, etc.
 
@@ -134,6 +135,8 @@ upl_finder_fast --param parameter.toml --seq ACTG...   # paste cDNA
 
 - `parameter.toml` の編集: `[design]` で標的種（例: GAPDH なら `human`）やTm・産物サイズを調整し、`[specificity]` でBLAST DBパスやモード（特異性不要なら `mode = "none"`）を設定します。`[paths]` の `upl_probe_tsv`（または互換キー `upl_probe_path`）で同梱の `roche_upl_sequences.tsv` か、自作の probe 定義ファイル（`.tsv`/`.txt`/`.json`）を指定します。  
   Edit `parameter.toml`: tune species/Tm/product size under `[design]`, set BLAST DB paths or `mode = "none"` under `[specificity]`, and point `[paths].upl_probe_tsv` (or compat key `upl_probe_path`) to the bundled `roche_upl_sequences.tsv` or your own probe definition file (`.tsv`/`.txt`/`.json`).
+- Roche公式例（`Roche_official.csv`）に寄せたい場合の目安: `design.min_probe_offset_bp = 2`、`design.primer_max_poly_x = 4`（poly-run 4連を許容）、必要なら `specificity.mode = "none"` でまず配置だけ合わせます。  
+  If you want to be closer to Roche “official” examples (`Roche_official.csv`): try `design.min_probe_offset_bp = 2` and `design.primer_max_poly_x = 4` (allow poly-run of 4), and optionally start with `specificity.mode = \"none\"` to focus on placement first.
 - `--param`: `parameter.toml` で設計条件（Tm範囲、プローブ距離など）と特異性用BLAST DBのパス (`specificity.transcriptome_blast_db`, `specificity.genome_blast_db`) を設定します。  
   Configure design constraints and BLAST DB paths in `parameter.toml` (`design.*`, `specificity.*`, `paths.upl_probe_tsv`).
 - `--output` を省略すると `output.out_dir`（デフォルト `upl_primer_probe/`）に `primer_upl_<target>_<YYMMDD_HHMM>.md` を保存します。  

@@ -109,6 +109,7 @@ def rank_candidates_with_rust(
     candidates: list[dict[str, Any]],
     exon_boundaries: list[int],
     min_probe_offset_bp: int,
+    primer_max_poly_x: int = 3,
 ) -> list[dict[str, Any]] | None:
     if not _rust_enabled():
         return None
@@ -119,6 +120,7 @@ def rank_candidates_with_rust(
             candidates,
             exon_boundaries,
             int(min_probe_offset_bp),
+            int(primer_max_poly_x),
         )
         return [dict(r) for r in rows]
     except Exception:
